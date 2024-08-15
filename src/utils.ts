@@ -123,7 +123,7 @@ export function createIgnoreFilter(
 
 export function estimateTokenCount(text: string): number {
   try {
-    const enc = encodingForModel("gpt-4");
+    const enc = encodingForModel("gpt-4o");
     const tokens = enc.encode(text);
     return tokens.length;
   } catch (error) {
@@ -247,4 +247,3 @@ export function createIncludeFilter(includePatterns: string[]): Ignore {
   }
   return ig;
 }
-
