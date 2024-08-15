@@ -2,6 +2,7 @@ import { Ignore } from "ignore";
 import { isBinaryFile } from "isbinaryfile";
 import { encodingForModel } from "js-tiktoken";
 import path from "path";
+import { promises as fs } from "fs";
 
 export const WHITESPACE_DEPENDENT_EXTENSIONS = [
   ".py", // Python
@@ -122,7 +123,7 @@ export function createIgnoreFilter(
 
 export function estimateTokenCount(text: string): number {
   try {
-    const enc = encodingForModel("gpt-4o");
+    const enc = encodingForModel("gpt-4");
     const tokens = enc.encode(text);
     return tokens.length;
   } catch (error) {
@@ -192,5 +193,58 @@ export function shouldTreatAsBinary(filePath: string): boolean {
     filePath.toLowerCase().endsWith(".svg") ||
     getFileType(filePath) !== "Binary"
   );
+}
+
+export async function readIgnoreFile(
+  inputDir: string,
+  filename: string,
+): Promise<string[]> {
+  try {
+    const filePath = path.join(inputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    console.log(formatLog(`Found ${filename} file in ${inputDir}.`, "📄"));
+    return content
+      .split("\n")
+      .filter((line) => line.trim() !== "" && !line.startsWith("#"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      console.log(formatLog(`No ${filename} file found in ${inputDir}.`, "❓"));
+      return [];
+    }
+    throw error;
+  }
+}
+
+export async function readIncludeFile(
+  inputDir: string,
+  filename: string,
+): Promise<string[]> {
+  try {
+    const filePath = path.join(inputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    console.log(formatLog(`Found ${filename} file in ${inputDir}.`, "📄"));
+    return content
+      .split("\n")
+      .filter((line) => line.trim() !== "" && !line.startsWith("#"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      console.log(formatLog(`No ${filename} file found in ${inputDir}.`, "❓"));
+      return [];
+    }
+    throw error;
+  }
+}
+
+export function createIncludeFilter(includePatterns: string[]): Ignore {
+  const ig = require("ignore")().add(includePatterns);
+  if (includePatterns.length > 0) {
+    console.log(`Include patterns:`);
+    includePatterns.forEach((pattern) => {
+      console.log(`  - ${pattern}`);
+    });
+  } else {
+    console.log("No include patterns found.");
+  }
+  return ig;
 }
 

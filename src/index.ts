@@ -16,31 +16,14 @@ import {
   isTextFile,
   getFileType,
   shouldTreatAsBinary,
+  readIgnoreFile,
+  readIncludeFile,
+  createIncludeFilter,
 } from "./utils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 
-async function readIgnoreFile(
-  inputDir: string,
-  filename: string,
-): Promise<string[]> {
-  try {
-    const filePath = path.join(inputDir, filename);
-    const content = await fs.readFile(filePath, "utf-8");
-    console.log(formatLog(`Found ${filename} file in ${inputDir}.`, "📄"));
-    return content
-      .split("\n")
-      .filter((line) => line.trim() !== "" && !line.startsWith("#"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      console.log(formatLog(`No ${filename} file found in ${inputDir}.`, "❓"));
-      return [];
-    }
-    throw error;
-  }
-}
-
-function displayIncludedFiles(includedFiles: string[]): void {
+async function displayIncludedFiles(includedFiles: string[]): Promise<void> {
   console.log(formatLog("Files included in the output:", "📋"));
   includedFiles.forEach((file, index) => {
     console.log(`${index + 1}. ${file}`);
@@ -54,13 +37,16 @@ async function aggregateFiles(
   removeWhitespaceFlag: boolean,
   showOutputFiles: boolean,
   ignoreFile: string,
+  includeFile: string,
 ): Promise<void> {
   try {
     const userIgnorePatterns = await readIgnoreFile(inputDir, ignoreFile);
+    const userIncludePatterns = await readIncludeFile(inputDir, includeFile);
     const defaultIgnore = useDefaultIgnores
       ? ignore().add(DEFAULT_IGNORES)
       : ignore();
     const customIgnore = createIgnoreFilter(userIgnorePatterns, ignoreFile);
+    const customInclude = createIncludeFilter(userIncludePatterns);
 
     if (useDefaultIgnores) {
       console.log(formatLog("Using default ignore patterns.", "🚫"));
@@ -102,6 +88,15 @@ async function aggregateFiles(
     for (const file of allFiles) {
       const fullPath = path.join(inputDir, file);
       const relativePath = path.relative(inputDir, fullPath);
+
+      // Check if the file should be included
+      const shouldInclude =
+        userIncludePatterns.length === 0 || customInclude.ignores(relativePath);
+
+      if (!shouldInclude) {
+        continue; // Skip this file if it's not in the include list
+      }
+
       if (
         path.relative(inputDir, outputFile) === relativePath ||
         (useDefaultIgnores && defaultIgnore.ignores(relativePath))
@@ -215,7 +210,7 @@ async function aggregateFiles(
     }
 
     if (showOutputFiles) {
-      displayIncludedFiles(includedFiles);
+      await displayIncludedFiles(includedFiles);
     }
 
     console.log(formatLog(`Done! Wrote code base to ${outputFile}`, "✅"));
@@ -237,6 +232,11 @@ program
     "Display a list of files included in the output",
   )
   .option("--ignore-file <file>", "Custom ignore file name", ".aidigestignore")
+  .option(
+    "--include-file <file>",
+    "File containing paths to include",
+    ".aidigestinclude",
+  )
   .action(async (options) => {
     const inputDir = path.resolve(options.input);
     const outputFile = path.isAbsolute(options.output)
@@ -249,6 +249,7 @@ program
       options.whitespaceRemoval,
       options.showOutputFiles,
       options.ignoreFile,
+      options.includeFile,
     );
   });
 
